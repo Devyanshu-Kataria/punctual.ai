@@ -9,7 +9,7 @@ import {
   AlertCircle, CheckCircle, Clock, ShieldAlert, User,
   Check, X, ShoppingCart, Globe, Briefcase, Building,
   Megaphone, Handshake, Smartphone, Settings, HelpCircle,
-  Video, Banknote, Landmark, Film, Undo2
+  Video, Banknote, Landmark, Film, Undo2, Trash2, UserPlus, ChevronRight
 } from 'lucide-react';
 import { DEPARTMENTS } from '../data/employees';
 import { supabase, type StrikeEmployee } from '../../lib/supabase';
@@ -66,6 +66,7 @@ function getBadge(count: number, excused: string | null) {
 }
 
 const FILTER_TABS = [
+  { label: 'All Employees', filter: (_e: StrikeEmployee) => true },
   { label: 'All Late', filter: (e: StrikeEmployee) => e.monthly_late_count >= 1 },
   { label: 'Critical', filter: (e: StrikeEmployee) => e.monthly_late_count >= 3 },
   { label: 'At Risk', filter: (e: StrikeEmployee) => e.monthly_late_count === 2 },
@@ -86,6 +87,16 @@ export function Dashboard() {
   const [dailyChartData, setDailyChartData] = useState<any[]>([]);
   const [rawDailyRecords, setRawDailyRecords] = useState<any[]>([]);
   const [rawLeaveBalances, setRawLeaveBalances] = useState<any[]>([]);
+
+  // Add Employee modal state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({ employee_id: '', name: '', department: '', designation: '' });
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  // Deactivate confirmation state
+  const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
+  const [deactivating, setDeactivating] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -126,7 +137,7 @@ export function Dashboard() {
   const fetchData = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     const [empRes, leaveRes] = await Promise.all([
-      supabase.from('strike_counter').select('*'),
+      supabase.from('strike_counter').select('*').eq('is_active', true),
       supabase.from('leave_balances').select('*'),
     ]);
     if (empRes.error) console.error('Error fetching data:', empRes.error);
@@ -159,6 +170,70 @@ export function Dashboard() {
     } catch {
       alert('Failed to update status. Please guarantee n8n is running properly and running the correct workflow.');
     }
+  };
+
+  const currentMonthYear = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  })();
+
+  const handleAddEmployee = async () => {
+    if (!addForm.employee_id.trim() || !addForm.name.trim() || !addForm.department.trim()) {
+      setAddError('Employee ID, Name, and Department are required.');
+      return;
+    }
+    setAddLoading(true);
+    setAddError(null);
+    try {
+      const { error: insertErr } = await supabase.from('strike_counter').insert([{
+        employee_id: addForm.employee_id.trim(),
+        name: addForm.name.trim(),
+        department: addForm.department,
+        designation: addForm.designation.trim() || null,
+        month_year: currentMonthYear,
+        monthly_late_count: 0,
+        strike_level: 0,
+        excused: null,
+        behaviour_analysis: null,
+        excuse_provided: null,
+        is_active: true,
+      }]);
+      if (insertErr) throw new Error(insertErr.message);
+
+      await supabase.from('leave_balances').insert([{
+        employee_id: addForm.employee_id.trim(),
+        employee_name: addForm.name.trim(),
+        department: addForm.department,
+        designation: addForm.designation.trim() || '',
+        month_year: currentMonthYear,
+        present_days: 0,
+        absent_days: 0,
+        lc_days: 0,
+        sl_taken: 0, cl_taken: 0, el_taken: 0,
+        sl_left: 12, cl_left: 12, el_left: 21,
+      }]);
+
+      setShowAddModal(false);
+      setAddForm({ employee_id: '', name: '', department: '', designation: '' });
+      await fetchData(false);
+    } catch (err: any) {
+      setAddError(err.message || 'Failed to add employee.');
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
+  const handleDeactivate = async (employeeId: string) => {
+    setDeactivating(true);
+    const { error } = await supabase
+      .from('strike_counter')
+      .update({ is_active: false })
+      .eq('employee_id', employeeId);
+    if (!error) {
+      setEmployees(prev => prev.filter(e => e.employee_id !== employeeId));
+    }
+    setConfirmDeactivateId(null);
+    setDeactivating(false);
   };
 
   const dashboardMetrics = useMemo(() => {
@@ -355,7 +430,15 @@ export function Dashboard() {
           <div className="p-4 border-b border-[#EEF0F6]">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-semibold text-[#1B2559]">Employees</span>
-              <button onClick={() => fetchData()} className="text-[10px] text-[#4361EE] font-medium hover:underline">Refresh</button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setAddForm({ employee_id: '', name: '', department: '', designation: '' }); setAddError(null); setShowAddModal(true); }}
+                  className="flex items-center gap-1 text-[10px] text-white bg-[#4361EE] hover:bg-[#3451D1] px-2 py-1 rounded-lg font-medium transition-colors"
+                >
+                  <UserPlus size={10} /> Add
+                </button>
+                <button onClick={() => fetchData()} className="text-[10px] text-[#4361EE] font-medium hover:underline">Refresh</button>
+              </div>
             </div>
             {/* Filter tabs */}
             <div className="flex gap-3">
@@ -396,9 +479,9 @@ export function Dashboard() {
               <div className="p-6 text-center text-[11px] text-[#8F9BB3]">No employees found.</div>
             ) : (
               filtered.map((emp) => (
+                <div key={emp.employee_id}>
                 <div
-                  key={emp.employee_id}
-                  className="flex items-start gap-2 px-4 py-3 border-b border-[#EEF0F6] hover:bg-[#F9FAFB] transition-colors"
+                  className="group flex items-start gap-2 px-4 py-3 border-b border-[#EEF0F6] hover:bg-[#F9FAFB] transition-colors"
                 >
                   {/* Initials avatar */}
                   <div className="w-8 h-8 rounded-full bg-[#EEF2FF] flex items-center justify-center shrink-0 mt-0.5">
@@ -413,7 +496,7 @@ export function Dashboard() {
                       {getBadge(emp.monthly_late_count, emp.excused)}
                       <span className="text-[10px] text-[#8F9BB3]">{emp.monthly_late_count} late days</span>
                     </div>
-                    {emp.excused !== 'APPROVED' && (
+                    {activeFilterTab !== 0 && emp.excused !== 'APPROVED' && (
                       <>
                         <div className="flex gap-1 mt-1.5">
                           <button
@@ -445,7 +528,7 @@ export function Dashboard() {
                         )}
                       </>
                     )}
-                    {emp.excused === 'APPROVED' && (
+                    {activeFilterTab !== 0 && emp.excused === 'APPROVED' && (
                       <div className="flex items-center gap-1.5 mt-1">
                         <span className="text-[10px] text-[#4361EE] font-medium">✓ Excused</span>
                         <button
@@ -458,12 +541,155 @@ export function Dashboard() {
                       </div>
                     )}
                   </div>
+                  {/* Deactivate icon — visible on row hover */}
+                  <button
+                    onClick={() => setConfirmDeactivateId(emp.employee_id)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto shrink-0 p-1 rounded hover:bg-red-50 text-[#8F9BB3] hover:text-red-500"
+                    title="Deactivate employee"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+                {/* Inline deactivate confirmation */}
+                {confirmDeactivateId === emp.employee_id && (
+                  <div className="mx-4 mb-3 p-3 bg-red-50 border border-red-100 rounded-xl">
+                    <p className="text-[11px] text-red-700 font-medium mb-2">Deactivate <span className="font-bold">{emp.name}</span>?</p>
+                    <p className="text-[10px] text-red-500 mb-2">They'll be hidden from the dashboard. No data is deleted.</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleDeactivate(emp.employee_id)}
+                        disabled={deactivating}
+                        className="flex-1 text-[10px] font-semibold bg-red-500 text-white rounded-lg py-1 hover:bg-red-600 transition-colors disabled:opacity-60"
+                      >
+                        {deactivating ? 'Deactivating...' : 'Yes, Deactivate'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeactivateId(null)}
+                        className="flex-1 text-[10px] font-semibold bg-white border border-[#EEF0F6] text-[#8F9BB3] rounded-lg py-1 hover:bg-[#F4F6FA] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
                 </div>
               ))
             )}
           </div>
         </div>
       </div>
+
+      {/* ── Add Employee Modal ── */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="flex-1 bg-black/30 backdrop-blur-sm"
+            onClick={() => setShowAddModal(false)}
+          />
+          {/* Slide-in panel */}
+          <div className="w-80 bg-white shadow-2xl flex flex-col h-full animate-[slideInRight_0.2s_ease-out]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#EEF0F6]">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-[#EEF2FF] flex items-center justify-center">
+                  <UserPlus size={13} className="text-[#4361EE]" />
+                </div>
+                <span className="text-sm font-semibold text-[#1B2559]">Add Employee</span>
+              </div>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="p-1 rounded-lg hover:bg-[#F4F6FA] text-[#8F9BB3] hover:text-[#1B2559] transition-colors"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Form */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+              {addError && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-[11px] text-red-600 font-medium">
+                  {addError}
+                </div>
+              )}
+
+              {[
+                { label: 'Employee ID', key: 'employee_id', placeholder: 'e.g. EMP001', required: true },
+                { label: 'Full Name', key: 'name', placeholder: 'e.g. Rahul Sharma', required: true },
+                { label: 'Designation', key: 'designation', placeholder: 'e.g. Software Engineer', required: false },
+              ].map(({ label, key, placeholder, required }) => (
+                <div key={key}>
+                  <label className="block text-[11px] font-semibold text-[#1B2559] mb-1.5">
+                    {label} {required && <span className="text-red-400">*</span>}
+                  </label>
+                  <input
+                    value={(addForm as any)[key]}
+                    onChange={e => setAddForm(f => ({ ...f, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                    className="w-full text-xs text-[#1B2559] bg-[#F4F6FA] border border-[#EEF0F6] rounded-xl px-3 py-2 outline-none focus:border-[#4361EE] focus:bg-white transition-colors placeholder:text-[#C5CDE8]"
+                  />
+                </div>
+              ))}
+
+              {/* Department Dropdown */}
+              <div>
+                <label className="block text-[11px] font-semibold text-[#1B2559] mb-1.5">
+                  Department <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={addForm.department}
+                    onChange={e => setAddForm(f => ({ ...f, department: e.target.value }))}
+                    className="w-full appearance-none text-xs text-[#1B2559] bg-[#F4F6FA] border border-[#EEF0F6] rounded-xl px-3 py-2 outline-none focus:border-[#4361EE] focus:bg-white transition-colors"
+                  >
+                    <option value="">Select department...</option>
+                    {['Design','Software Development','Data Science','Sales','HR','Human Resource',
+                      'Online Sales','Website','Business Development','Management','Digital Marketing',
+                      'Client Relationship Management','Social Media','Operations Management',
+                      'Cinematography','Finance & Accounts'].map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                  <ChevronRight size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8F9BB3] rotate-90 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Defaults Info */}
+              <div className="bg-[#EEF2FF] rounded-xl p-3 border border-[#D4DEFF]">
+                <p className="text-[10px] font-bold text-[#4361EE] mb-1.5">Default Values</p>
+                <div className="grid grid-cols-2 gap-1">
+                  {[
+                    ['Late Count', '0'], ['Strike Level', '0'],
+                    ['SL Quota', '12'], ['CL Quota', '12'], ['EL Quota', '21'],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex justify-between">
+                      <span className="text-[10px] text-[#8F9BB3]">{k}</span>
+                      <span className="text-[10px] font-semibold text-[#1B2559]">{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-4 border-t border-[#EEF0F6] flex gap-2">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="flex-1 text-xs font-semibold text-[#8F9BB3] bg-[#F4F6FA] rounded-xl py-2.5 hover:bg-[#EEF0F6] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddEmployee}
+                disabled={addLoading}
+                className="flex-1 text-xs font-semibold text-white bg-[#4361EE] rounded-xl py-2.5 hover:bg-[#3451D1] transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+              >
+                {addLoading ? 'Adding...' : (<><UserPlus size={12} /> Add Employee</>)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

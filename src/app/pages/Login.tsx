@@ -4,10 +4,10 @@ import { supabase } from '../../lib/supabase';
 
 export function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail]       = useState('');
-  const [empId, setEmpId]       = useState('');
+  const [email, setEmail] = useState('');
+  const [empId, setEmpId] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading]   = useState(false);
+  const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isDark, setIsDark] = useState(false);
 
@@ -29,7 +29,7 @@ export function LoginPage() {
 
   /** Surface errors as returned by Supabase directly */
   const friendlyError = (msg: string): string => {
-    return msg; 
+    return msg;
   };
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -77,7 +77,10 @@ export function LoginPage() {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { queryParams: { access_type: 'offline', prompt: 'consent' } },
+        options: {
+          queryParams: { access_type: 'offline', prompt: 'consent' },
+          redirectTo: window.location.origin,
+        },
       });
       if (error) throw error;
     } catch (err: any) {
@@ -88,13 +91,13 @@ export function LoginPage() {
 
   const inputClass = "w-full pl-9 pr-3 py-2.5 text-sm text-[#1B2559] dark:text-white bg-[#F4F6FA] dark:bg-[#0B1437] border border-[#EEF0F6] dark:border-white/10 rounded-lg outline-none focus:border-[#4361EE] focus:ring-1 focus:ring-[#4361EE] placeholder:text-[#8F9BB3] dark:placeholder:text-[#A3AED0] transition-colors";
   const labelClass = "block text-xs font-semibold text-[#1B2559] dark:text-white uppercase tracking-wider mb-1.5";
-  const iconClass  = "absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none";
+  const iconClass = "absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none";
 
   return (
     <div className="min-h-screen bg-[#F0F2F8] dark:bg-[#0B1437] flex items-center justify-center p-4 transition-colors duration-200 relative">
-      
+
       {/* Dark Mode Toggle (Top Right) */}
-      <button 
+      <button
         onClick={toggleDarkMode}
         className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white dark:bg-[#111C44] shadow-sm border border-[#EEF0F6] dark:border-white/10 flex items-center justify-center transition-all hover:bg-[#F4F6FA] dark:hover:bg-[#1E293B]"
       >

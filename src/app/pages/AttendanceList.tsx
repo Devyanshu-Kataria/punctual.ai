@@ -28,7 +28,7 @@ export function AttendanceList() {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('strike_counter').select('*');
+    const { data, error } = await supabase.from('strike_counter').select('*').eq('is_active', true);
     if (error) console.error('Error:', error);
     else setEmployees(data || []);
     setLoading(false);

@@ -11,6 +11,7 @@ export interface StrikeEmployee {
   employee_id: string;
   name: string;
   department?: string;
+  designation?: string;
   monthly_late_count: number;
   strike_level: number;
   last_warning_date: string;
@@ -18,6 +19,7 @@ export interface StrikeEmployee {
   excused: string | null;
   behaviour_analysis: string | null;
   excuse_provided?: string | null;
+  is_active: boolean;
 }
 
 export interface LeaveBalance {

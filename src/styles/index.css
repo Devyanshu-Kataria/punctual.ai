@@ -33,3 +33,9 @@
 .dark .text-orange-600 { color: #fdba74 !important; }
 .dark .text-red-500 { color: #fca5a5 !important; }
 .dark .bg-\[\#EEF0F6\] { background-color: #2a2a2a; }
+
+/* Modal slide-in animation */
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
